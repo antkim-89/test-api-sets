@@ -62,8 +62,8 @@
   - 요청 경로에 지정한 밀리초(ms) 만큼 대기 후 응답을 반환합니다. (예: `http://localhost:3001/delay/2000` -> 2초 뒤 응답)
 - **의도적인 에러 발생 (Failover 테스트용)**: `GET /error`
   - 즉각적으로 `500 Internal Server Error` 응답을 에러 메시지와 함께 반환합니다.
-- **스트리밍 응답 (Streaming/Chunked 테스트용)**: `GET /stream`
-  - `Transfer-Encoding: chunked` 헤더와 함께 1000ms 주기로 총 10개의 JSON 데이터 청크를 순차적으로 전송한 후 연결을 종료합니다. 게이트웨이의 스트리밍 중계 기능을 테스트할 때 유용합니다.
+- **스트리밍 응답 (Server-Sent Events - SSE 테스트용)**: `GET /stream`
+  - `Content-Type: text/event-stream` 헤더와 함께 100ms ~ 1000ms 사이의 무작위(Random) 지연 시간을 두고 총 10개의 JSON 데이터 청크를 SSE 표준 포맷(`data: <json>\n\n`)으로 전송합니다. 게이트웨이의 SSE 중계 및 지연 처리 기능을 테스트하기 좋습니다.
 
 ---
 

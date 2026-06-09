@@ -60,12 +60,11 @@ app.get('/error', (req, res) => {
   });
 });
 
-// 4. 공통 Streaming Endpoint (HTTP Chunked Transfer Encoding 테스트용)
+// 4. 공통 Streaming Endpoint (Server-Sent Events(SSE) 테스트용)
 app.get('/stream', (req, res) => {
-  // Transfer-Encoding: chunked 설정
+  // SSE 헤더 설정
   res.writeHead(200, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Transfer-Encoding': 'chunked',
+    'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive'
   });
@@ -73,23 +72,33 @@ app.get('/stream', (req, res) => {
   let count = 0;
   const maxCount = 10;
   
-  const interval = setInterval(() => {
+  // 랜덤 지연 시간을 바탕으로 재귀적 setTimeout 호출
+  const sendChunk = () => {
     count++;
+    
+    // 100ms ~ 1000ms 사이의 랜덤 딜레이 계산
+    const delay = Math.floor(Math.random() * 900) + 100;
+    
     const data = {
       chunk: count,
       message: `Streaming chunk #${count} from ${SERVER_ID}`,
       port: PORT,
+      delayApplied: `${delay}ms`,
       timestamp: new Date().toISOString()
     };
     
-    // JSON 청크 전송 후 개행
-    res.write(JSON.stringify(data) + '\n');
+    // SSE 표준 포맷에 맞게 전송 ("data: <content>\n\n")
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
     
-    if (count >= maxCount) {
-      clearInterval(interval);
+    if (count < maxCount) {
+      setTimeout(sendChunk, delay);
+    } else {
       res.end();
     }
-  }, 1000); // 200ms 간격으로 전송
+  };
+
+  // 첫 번째 청크는 즉시 또는 짧은 지연 후 발송
+  setTimeout(sendChunk, 50);
 });
 
 // 5. 고유 마이크로서비스 라우터 로드 및 Swagger 연동
@@ -133,11 +142,11 @@ try {
       if (!latestSpec.paths) latestSpec.paths = {};
       latestSpec.paths['/stream'] = {
         "get": {
-          "summary": "Streaming response (Chunked Transfer Encoding)",
-          "description": "Returns JSON data chunks one by one with a 200ms delay to test Gateway streaming capabilities.",
+          "summary": "Streaming response (Server-Sent Events - SSE)",
+          "description": "Returns JSON data chunks formatted as SSE one by one with a random delay between 100ms and 1000ms.",
           "responses": {
             "200": {
-              "description": "Stream of JSON chunks"
+              "description": "SSE Event stream with JSON data payload"
             }
           }
         }
