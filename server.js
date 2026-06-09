@@ -50,11 +50,17 @@ app.get('/delay/:ms', (req, res) => {
   }, ms);
 });
 
-// 3. 공통 Error Endpoint (게이트웨이 에러 감지 테스트용)
-app.get('/error', (req, res) => {
-  res.status(500).json({
+// 3. 공통 Error Endpoint (게이트웨이 에러 감지 테스트용 - 다양한 HTTP 상태 코드 지원)
+app.get(['/error', '/error/:code'], (req, res) => {
+  const code = parseInt(req.params.code || req.query.code, 10) || 500;
+  
+  // 유효한 HTTP 상태 코드 범위 검증 (100 ~ 599)
+  const isValidStatus = code >= 100 && code <= 599;
+  const statusCode = isValidStatus ? code : 500;
+
+  res.status(statusCode).json({
     status: 'error',
-    message: `Intentionally generated 500 Error from ${SERVER_ID}`,
+    message: `Intentionally generated ${statusCode} Error from ${SERVER_ID}`,
     port: PORT,
     serverId: SERVER_ID
   });
@@ -99,6 +105,31 @@ app.get('/stream', (req, res) => {
 
   // 첫 번째 청크는 즉시 또는 짧은 지연 후 발송
   setTimeout(sendChunk, 50);
+});
+
+// 4-1. 공통 Shutdown Endpoint (장애 전파 및 오프라인 모사 테스트용)
+// 프로세스를 완전히 종료하면 PM2가 자동 재시작(Autorestart)시킬 수 있으므로, 
+// 서버 포트 리스너만 닫아서 오프라인 상태를 유발합니다. (Gateway가 Connection Refused를 보게 됨)
+let serverInstance;
+app.post('/shutdown', (req, res) => {
+  res.json({
+    message: `Server listener is shutting down. Port ${PORT} will no longer accept connections.`,
+    port: PORT,
+    serverId: SERVER_ID
+  });
+
+  console.log(`[${SERVER_ID}] Received shutdown request. Closing server listener...`);
+  
+  if (serverInstance) {
+    serverInstance.close(() => {
+      console.log(`[${SERVER_ID}] Server listener successfully closed. Process remains alive but port is unbound.`);
+    });
+  } else {
+    // 혹시 리스너 참조가 없는 경우 대비해 강제 종료 백업
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  }
 });
 
 // 5. 고유 마이크로서비스 라우터 로드 및 Swagger 연동
@@ -151,6 +182,43 @@ try {
           }
         }
       };
+
+      // 스웨거 스펙에 공통 /shutdown 명세 추가
+      latestSpec.paths['/shutdown'] = {
+        "post": {
+          "summary": "Simulate server shutdown (Offline simulation)",
+          "description": "Closes the HTTP server port listener. Process remains alive on PM2 but the port is unbound, simulating 'Connection Refused' failures.",
+          "responses": {
+            "200": {
+              "description": "Shutdown initiation confirmation"
+            }
+          }
+        }
+      };
+
+      // 스웨거 스펙에 공통 /error/{code} 명세 추가
+      latestSpec.paths['/error/{code}'] = {
+        "get": {
+          "summary": "Generate specific HTTP error status code",
+          "description": "Returns a response with the specified HTTP status code (e.g. 429, 503, 504) to test gateway resilience.",
+          "parameters": [
+            {
+              "name": "code",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "default": 500
+              }
+            }
+          ],
+          "responses": {
+            "default": {
+              "description": "Custom error status response"
+            }
+          }
+        }
+      };
       
       // swagger-ui-express는 req.swaggerDoc이 정의되어 있으면 이를 바탕으로 문서를 동적으로 렌더링합니다.
       req.swaggerDoc = latestSpec;
@@ -164,8 +232,8 @@ try {
 } catch (err) {
   console.error(`[${SERVER_ID}] Failed to load Swagger spec:`, err.message);
 }
-
+ 
 // 서버 기동
-app.listen(PORT, () => {
+serverInstance = app.listen(PORT, () => {
   console.log(`[${SERVER_ID}] Mock API Server is running on port ${PORT}`);
 });

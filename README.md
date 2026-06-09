@@ -60,8 +60,10 @@
   - 현재 서버 정보, 포트, 구동 시간을 JSON으로 반환합니다.
 - **의도적인 응답 지연 (Timeout 테스트용)**: `GET /delay/:ms`
   - 요청 경로에 지정한 밀리초(ms) 만큼 대기 후 응답을 반환합니다. (예: `http://localhost:3001/delay/2000` -> 2초 뒤 응답)
-- **의도적인 에러 발생 (Failover 테스트용)**: `GET /error`
-  - 즉각적으로 `500 Internal Server Error` 응답을 에러 메시지와 함께 반환합니다.
+- **의도적인 다양한 에러 반환 (Failover 테스트용)**: `GET /error` 또는 `GET /error/:code`
+  - 지정한 HTTP 상태 코드(예: 429, 503, 504 등)로 JSON 에러 메시지를 반환합니다. 파라미터가 없으면 기본값은 `500` 입니다.
+- **서버 셧다운 (장애 전파 / 회로 차단 테스트용)**: `POST /shutdown`
+  - 해당 API 서버의 HTTP 포트 리스너를 닫습니다. 프로세스는 PM2 상에 살아있지만 포트 바인딩이 끊기므로 게이트웨이는 `Connection Refused` 에러를 감지하게 되어 실질적인 장애 오프라인 상태가 유발됩니다.
 - **스트리밍 응답 (Server-Sent Events - SSE 테스트용)**: `GET /stream`
   - `Content-Type: text/event-stream` 헤더와 함께 100ms ~ 1000ms 사이의 무작위(Random) 지연 시간을 두고 총 10개의 JSON 데이터 청크를 SSE 표준 포맷(`data: <json>\n\n`)으로 전송합니다. 게이트웨이의 SSE 중계 및 지연 처리 기능을 테스트하기 좋습니다.
 
