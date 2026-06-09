@@ -12,16 +12,27 @@ const services = [
 ];
 
 module.exports = {
-  apps: services.map((name, i) => {
-    const port = 3001 + i;
-    return {
-      name: name,
-      script: './server.js',
+  apps: [
+    ...services.map((name, i) => {
+      const port = 3001 + i;
+      return {
+        name: name,
+        script: './server.js',
+        watch: false,
+        env: {
+          NODE_ENV: 'development',
+          PORT: port
+        }
+      };
+    }),
+    {
+      name: 'gateway-dashboard',
+      script: './dashboard.js',
       watch: false,
       env: {
         NODE_ENV: 'development',
-        PORT: port
+        PORT: 3000
       }
-    };
-  })
+    }
+  ]
 };

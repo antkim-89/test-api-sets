@@ -19,15 +19,20 @@
 .
 ├── package.json          # Express, PM2, swagger-ui-express 의존성 및 스크립트 정의
 ├── server.js             # 공통 Express 서버 및 포트별 동적 라우터/Swagger 바인딩
-├── ecosystem.config.js   # PM2용 마이크로서비스 10개 프로세스 설정
+├── dashboard.js          # 웹 대시보드 서버 & SSE 부하 테스트 중계 백엔드
+├── ecosystem.config.js   # PM2용 마이크로서비스 10개 및 대시보드 통합 설정
+├── public/               # 웹 대시보드 정적 HTML/CSS/JS 리소스
+│   ├── index.html        # 서비스 제어 판넬 화면
+│   ├── stress.html       # 부하 테스트 콘솔 화면
+│   ├── style.css         # 글래스모피즘 어두운 테마 CSS 스타일
+│   ├── app.js            # 서비스 제어 화면용 바닐라 JS (CORS 직접 통신)
+│   └── stress.js         # 부하 테스트 연동 및 SSE 리스너
 └── src/
     ├── routes/           # 10개 마이크로서비스 개별 라우터 구현
     │   ├── user.js
-    │   ├── product.js
     │   └── ...
     └── swagger/          # 각 마이크로서비스별 OpenAPI 3.0 명세 JSON 파일
         ├── user.swagger.json
-        ├── product.swagger.json
         └── ...
 ```
 
@@ -102,6 +107,28 @@
 
 ---
 
+## 🖥 웹 대시보드 및 제어 콘솔 (Web Dashboard)
+
+마이크로서비스들을 모니터링하고 실시간으로 설정을 주입하거나 부하 테스트를 구동할 수 있는 바닐라 글래스모피즘 어두운 테마 기반의 웹 관리 콘솔을 제공합니다.
+
+* **접속 주소**: [http://localhost:3000](http://localhost:3000)
+
+### 1. 서비스 제어 판넬 (`/index.html`)
+- **다이렉트 브라우저 제어**: 게이트웨이나 중계 서버를 거치지 않고 브라우저에서 CORS를 통해 마이크로서비스 제어 포트(`4001~4010`)로 직접 설정을 주입합니다.
+- **실시간 온/오프 토글**: 각 카드 상단의 토글 스위치로 즉시 서버 온/오프라인 모사를 수행합니다.
+- **지연 시간 주입**: 숫자를 입력하고 '적용'을 누르면 즉각 해당 서비스에 지연 시간(ms)이 할당됩니다.
+- **자동 복구 종료**: 종료 시간을 입력하고 **[자동복구]** 버튼을 클릭하면, 서버가 즉시 종료된 후 지정된 초(기본값 5초) 뒤 자동으로 원격 온라인 복구됩니다.
+- **응답 가로채기(Override) 관리**: 특정 API 경로/메서드에 대한 가짜 HTTP 응답코드, 헤더, 바디 규칙을 추가하거나 일괄 초기화할 수 있습니다.
+
+### 2. 부하 테스트 콘솔 (`/stress.html`)
+- **브라우저 트래픽 제어**: 부하 대상 게이트웨이 주소, 동시 연결 수, 테스트 시간, 부하 시나리오를 UI 상에서 설정하고 시작할 수 있습니다.
+- **실시간 SSE 진척도 중계**: 부하 테스트 진행 현황(Progress Bar 및 CLI 실행 출력 스트림)이 Server-Sent Events로 웹 화면에 실시간 스트리밍됩니다.
+- **상세 리포트 시각화**: 테스트 성공 후 평균 레이턴시, 처리율(Success Rate), Req/Sec 수치 및 원시 통계 테이블이 미려하게 가공되어 대시보드에 렌더링됩니다.
+
+---
+
+---
+
 ## 🏋️‍♂️ 시나리오 기반 부하 테스트 (Stress Test)
 
 게이트웨이의 유량 제어(Rate Limiting), 타임아웃, 에러 복구 등을 검증하기 위해 시나리오별 대량의 트래픽을 가할 수 있는 CLI 도구를 내장하고 있습니다.
@@ -138,12 +165,12 @@ npm run stress -- -t http://localhost:8000 -c 200 -d 15 -s auth-failure
 npm install
 ```
 
-### 1. API 서버 전체 시작
+### 1. API 서버 및 대시보드 통합 기동
 
-PM2를 사용해 10개의 백그라운드 프로세스로 서버를 일괄 실행합니다.
+PM2 에코시스템을 사용하여 10개의 백그라운드 마이크로서비스 및 1개의 웹 대시보드 서버(포트 3000)를 일괄 구동합니다.
 
 ```bash
-npm run start
+npm start
 # 또는: npx pm2 start ecosystem.config.js
 ```
 
@@ -165,11 +192,11 @@ npm run logs
 # 또는: npx pm2 logs
 ```
 
-### 4. API 서버 전체 종료
+### 4. 전체 프로세스 정지 및 리스트 정리
 
-구동 중인 모든 API 서버 프로세스를 중단하고 PM2 목록에서 제거합니다.
+구동 중인 모든 프로세스를 안전하게 정지(stop)한 직후, PM2 관리 목록에서 깨끗이 삭제(delete)하여 목록을 정리합니다.
 
 ```bash
 npm run stop
-# 또는: npx pm2 delete all
+# 또는: npx pm2 stop ecosystem.config.js && npx pm2 delete ecosystem.config.js
 ```
