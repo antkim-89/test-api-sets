@@ -7,11 +7,16 @@
     "start": "pm2 start ecosystem.config.js",
     "stop": "pm2 delete all",
     "status": "pm2 status",
-    "logs": "pm2 logs"
+    "logs": "pm2 logs",
+    "stress": "node stress-test.js",
+    "dashboard": "node dashboard.js"
   },
   "dependencies": {
     "express": "^4.19.2",
     "pm2": "^5.4.0",
     "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "autocannon": "^8.0.0"
   }
 }

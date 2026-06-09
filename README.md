@@ -62,10 +62,71 @@
   - 요청 경로에 지정한 밀리초(ms) 만큼 대기 후 응답을 반환합니다. (예: `http://localhost:3001/delay/2000` -> 2초 뒤 응답)
 - **의도적인 다양한 에러 반환 (Failover 테스트용)**: `GET /error` 또는 `GET /error/:code`
   - 지정한 HTTP 상태 코드(예: 429, 503, 504 등)로 JSON 에러 메시지를 반환합니다. 파라미터가 없으면 기본값은 `500` 입니다.
-- **서버 셧다운 (장애 전파 / 회로 차단 테스트용)**: `POST /shutdown`
-  - 해당 API 서버의 HTTP 포트 리스너를 닫습니다. 프로세스는 PM2 상에 살아있지만 포트 바인딩이 끊기므로 게이트웨이는 `Connection Refused` 에러를 감지하게 되어 실질적인 장애 오프라인 상태가 유발됩니다.
+- **서버 셧다운 (장애 전파 / 회로 차단 테스트용)**: `POST /shutdown` 또는 `POST /shutdown?timeout=5000`
+  - 해당 API 서버의 HTTP 포트 리스너를 닫습니다. 프로세스는 PM2 상에 살아있지만 포트 바인딩이 끊기므로 게이트웨이는 `Connection Refused` 에러를 감지하게 되어 실질적인 장애 오프라인 상태가 유발됩니다. `timeout` 파라미터(ms 단위)를 넘겨주면 지정된 시간 이후 자동으로 서버가 복구됩니다.
 - **스트리밍 응답 (Server-Sent Events - SSE 테스트용)**: `GET /stream`
   - `Content-Type: text/event-stream` 헤더와 함께 100ms ~ 1000ms 사이의 무작위(Random) 지연 시간을 두고 총 10개의 JSON 데이터 청크를 SSE 표준 포맷(`data: <json>\n\n`)으로 전송합니다. 게이트웨이의 SSE 중계 및 지연 처리 기능을 테스트하기 좋습니다.
+
+---
+
+## ⚙️ 실시간 제어 포트 (Control Port) 및 Admin API
+
+메인 포트가 닫힌 상태(`Connection Refused`)에서도 서버를 동적으로 다시 켜거나, 실시간으로 설정을 주입하기 위해 각 서비스는 `PORT + 1000` (예: 3001의 제어 포트는 4001) 포트에서 항상 대기하는 제어 서버를 가동합니다.
+
+### 1. 온/오프라인 제어 및 상태 조회
+- **서버 켜기 (메인 포트 바인딩)**: `POST /startup`
+  - 닫혀 있던 메인 포트 리스너를 다시 열어 정상 서비스 상태로 복구합니다. (호출 예: `POST http://localhost:4001/startup`)
+- **서버 끄기 (메인 포트 해제)**: `POST /shutdown` 또는 `POST /shutdown?timeout=ms`
+  - 메인 포트 리스너를 닫습니다. `timeout` 지정 시 지정된 밀리초 후에 메인 포트가 자동으로 다시 열립니다.
+- **상태 조회**: `GET /status`
+  - 현재 서버 구동 상태 및 적용된 동적 설정 내역을 조회합니다. (호출 예: `GET http://localhost:4001/status`)
+
+### 2. 동적 장애 시뮬레이션 설정 (Admin API)
+- **인위적 지연(Delay) 등록**: `POST /control/delay` (Body: `{"delayMs": 2000}`) 또는 쿼리 스트링 `?delayMs=2000`
+  - 해당 서버로 오는 모든 요청에 대해 강제적인 지연을 유발합니다. (서킷 브레이커, 게이트웨이 타임아웃 테스트에 적합)
+- **인위적 지연 해제**: `DELETE /control/delay`
+- **특정 API 응답 가로채기(Override)**: `POST /control/override`
+  - 특정 경로와 HTTP 메서드에 대해 응답코드, 헤더, 바디를 실시간으로 변경하여 게이트웨이의 라우팅/페이로드 조작을 테스트합니다.
+  - **Request Body 예시**:
+    ```json
+    {
+      "path": "/users/profile",
+      "method": "GET",
+      "statusCode": 200,
+      "body": { "id": "custom-user", "status": "modified-in-realtime" },
+      "headers": { "X-Test-Header": "Gateway-Stress" }
+    }
+    ```
+- **특정 가로채기 해제**: `DELETE /control/override` (Body: `{"path": "/users/profile", "method": "GET"}`)
+- **모든 가로채기 해제**: `DELETE /control/override/all`
+
+---
+
+## 🏋️‍♂️ 시나리오 기반 부하 테스트 (Stress Test)
+
+게이트웨이의 유량 제어(Rate Limiting), 타임아웃, 에러 복구 등을 검증하기 위해 시나리오별 대량의 트래픽을 가할 수 있는 CLI 도구를 내장하고 있습니다.
+
+### 실행 방법
+```bash
+# 기본 설정으로 로컬 게이트웨이(http://localhost:8000)에 혼합 부하 테스트 실행
+npm run stress
+
+# 특정 옵션 지정 (대상 게이트웨이 주소, 동시성 200, 테스트 기간 15초, 인증 실패 시나리오)
+npm run stress -- -t http://localhost:8000 -c 200 -d 15 -s auth-failure
+```
+
+### CLI 옵션
+- `-t, --target <url>`: 부하를 가할 대상 Gateway의 Base URL (기본값: `http://localhost:8000`)
+- `-c, --connections <num>`: 동시 연결 커넥션 수 (기본값: `100`)
+- `-d, --duration <sec>`: 테스트 실행 지속 시간(초) (기본값: `10`)
+- `-s, --scenario <name>`: 부하 테스트 시나리오 (기본값: `mixed`)
+
+### 지원하는 시나리오 (`-s`) 목록
+1. `mixed`: 일반적인 복합 비즈니스 요청 패턴 순환 (조회, 주문, 결제 등)
+2. `auth-failure`: 잘못된 로그인 정보 및 인증 헤더 누락 요청을 고부하로 전송 (게이트웨이 인증 미들웨어 검증)
+3. `router-stress`: 404 라우팅 에러 및 500 에러 유발 경로 무작위 호출 (게이트웨이 라우팅 엔진 성능 및 복구 테스트)
+4. `latency-stress`: 응답 지연 API(500ms ~ 2000ms) 호출 (게이트웨이 타임아웃 처리 및 서킷 브레이커 연동 테스트)
+5. `transaction-heavy`: 쓰기 위주의 무거운 트랜잭션 요청 집중 발생 (주문/결제 처리 성능 테스트)
 
 ---
 

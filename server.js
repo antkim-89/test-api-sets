@@ -26,6 +26,85 @@ const SERVICES = {
 const serviceConfig = SERVICES[PORT] || { name: 'user', prefix: '/users' };
 const SERVER_ID = `${serviceConfig.name}-service`;
 
+// --- 실시간 제어 상태 및 설정 ---
+let serverInstance = null;
+let autoRecoveryTimer = null;
+const dynamicConfig = {
+  delayMs: 0,
+  overrides: {} // key: "METHOD:path" -> { statusCode, body, headers }
+};
+
+// 메인 서버 기동 함수
+function startMainServer() {
+  if (serverInstance && serverInstance.listening) {
+    console.log(`[${SERVER_ID}] Main server is already listening on port ${PORT}`);
+    return;
+  }
+  
+  if (autoRecoveryTimer) {
+    clearTimeout(autoRecoveryTimer);
+    autoRecoveryTimer = null;
+  }
+
+  serverInstance = app.listen(PORT, () => {
+    console.log(`[${SERVER_ID}] Mock API Server is running on port ${PORT}`);
+  });
+
+  serverInstance.on('close', () => {
+    serverInstance = null;
+  });
+}
+
+// 메인 서버 중지 함수
+function stopMainServer(timeoutMs) {
+  if (serverInstance) {
+    serverInstance.close(() => {
+      console.log(`[${SERVER_ID}] Server listener successfully closed. Port ${PORT} is unbound.`);
+      
+      if (timeoutMs && timeoutMs > 0) {
+        console.log(`[${SERVER_ID}] Auto-recovery scheduled in ${timeoutMs}ms.`);
+        autoRecoveryTimer = setTimeout(() => {
+          console.log(`[${SERVER_ID}] Auto-recovering: starting main server...`);
+          startMainServer();
+        }, timeoutMs);
+      }
+    });
+  } else {
+    console.log(`[${SERVER_ID}] Main server listener is already closed.`);
+  }
+}
+
+// --- 실시간 지연 및 응답 조작 미들웨어 ---
+app.use((req, res, next) => {
+  const proceed = () => {
+    const reqPath = req.path;
+    const reqMethod = req.method.toUpperCase();
+    const overrideKey = `${reqMethod}:${reqPath}`;
+    
+    if (dynamicConfig.overrides[overrideKey]) {
+      const override = dynamicConfig.overrides[overrideKey];
+      console.log(`[${SERVER_ID}] Intercepted ${reqMethod} ${reqPath} with dynamic override.`);
+      
+      if (override.headers) {
+        Object.keys(override.headers).forEach(headerName => {
+          res.setHeader(headerName, override.headers[headerName]);
+        });
+      }
+      
+      const status = override.statusCode || 200;
+      res.status(status).json(override.body || {});
+    } else {
+      next();
+    }
+  };
+
+  if (dynamicConfig.delayMs > 0) {
+    setTimeout(proceed, dynamicConfig.delayMs);
+  } else {
+    proceed();
+  }
+});
+
 // 1. 공통 Health Check Endpoint
 app.get(['/', '/health'], (req, res) => {
   res.json({
@@ -108,28 +187,20 @@ app.get('/stream', (req, res) => {
 });
 
 // 4-1. 공통 Shutdown Endpoint (장애 전파 및 오프라인 모사 테스트용)
-// 프로세스를 완전히 종료하면 PM2가 자동 재시작(Autorestart)시킬 수 있으므로, 
-// 서버 포트 리스너만 닫아서 오프라인 상태를 유발합니다. (Gateway가 Connection Refused를 보게 됨)
-let serverInstance;
 app.post('/shutdown', (req, res) => {
+  const timeout = parseInt(req.query.timeout || req.body.timeout, 10) || 0;
   res.json({
     message: `Server listener is shutting down. Port ${PORT} will no longer accept connections.`,
     port: PORT,
-    serverId: SERVER_ID
+    serverId: SERVER_ID,
+    autoRecoveryInMs: timeout || null
   });
 
-  console.log(`[${SERVER_ID}] Received shutdown request. Closing server listener...`);
+  console.log(`[${SERVER_ID}] Received shutdown request on main port. Closing server listener...`);
   
-  if (serverInstance) {
-    serverInstance.close(() => {
-      console.log(`[${SERVER_ID}] Server listener successfully closed. Process remains alive but port is unbound.`);
-    });
-  } else {
-    // 혹시 리스너 참조가 없는 경우 대비해 강제 종료 백업
-    setTimeout(() => {
-      process.exit(1);
-    }, 1000);
-  }
+  setTimeout(() => {
+    stopMainServer(timeout);
+  }, 100);
 });
 
 // 5. 고유 마이크로서비스 라우터 로드 및 Swagger 연동
@@ -233,7 +304,127 @@ try {
   console.error(`[${SERVER_ID}] Failed to load Swagger spec:`, err.message);
 }
  
-// 서버 기동
-serverInstance = app.listen(PORT, () => {
-  console.log(`[${SERVER_ID}] Mock API Server is running on port ${PORT}`);
+// 메인 서버 기동
+startMainServer();
+
+// --- 제어 포트 (PORT + 1000) 구동 ---
+const controlApp = express();
+
+// CORS 허용 미들웨어 (Direct 통신용)
+controlApp.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+controlApp.use(express.json());
+
+// 상태 조회
+controlApp.get('/status', (req, res) => {
+  res.json({
+    serverId: SERVER_ID,
+    port: PORT,
+    controlPort: PORT + 1000,
+    mainServerOnline: !!(serverInstance && serverInstance.listening),
+    dynamicConfig: {
+      delayMs: dynamicConfig.delayMs,
+      overridesCount: Object.keys(dynamicConfig.overrides).length,
+      overrides: dynamicConfig.overrides
+    }
+  });
+});
+
+// 메인 서버 복구 (켜기)
+controlApp.post('/startup', (req, res) => {
+  if (serverInstance && serverInstance.listening) {
+    return res.status(400).json({ error: "Server is already online" });
+  }
+  startMainServer();
+  res.json({ message: `Main server started on port ${PORT}`, serverId: SERVER_ID });
+});
+
+// 메인 서버 중지 (끄기)
+controlApp.post('/shutdown', (req, res) => {
+  const timeout = parseInt(req.query.timeout || req.body.timeout, 10) || 0;
+  if (!serverInstance || !serverInstance.listening) {
+    return res.status(400).json({ error: "Server is already offline" });
+  }
+  stopMainServer(timeout);
+  res.json({ 
+    message: `Main server stopped on port ${PORT}`, 
+    serverId: SERVER_ID, 
+    autoRecoveryInMs: timeout || null 
+  });
+});
+
+// 인위적 지연(delayMs) 동적 제어
+controlApp.post('/control/delay', (req, res) => {
+  const delayMs = parseInt(req.body.delayMs || req.query.delayMs, 10);
+  if (isNaN(delayMs) || delayMs < 0) {
+    return res.status(400).json({ error: "Invalid delayMs value" });
+  }
+  dynamicConfig.delayMs = delayMs;
+  console.log(`[${SERVER_ID}] Dynamic delay set to ${delayMs}ms`);
+  res.json({ message: `Dynamic delay set to ${delayMs}ms`, delayMs });
+});
+
+controlApp.delete('/control/delay', (req, res) => {
+  dynamicConfig.delayMs = 0;
+  console.log(`[${SERVER_ID}] Dynamic delay cleared`);
+  res.json({ message: "Dynamic delay cleared" });
+});
+
+// 응답 재정의(override) 동적 제어
+controlApp.post('/control/override', (req, res) => {
+  const { path: overridePath, method, statusCode, body, headers } = req.body;
+  if (!overridePath || !method) {
+    return res.status(400).json({ error: "path and method are required" });
+  }
+  
+  const reqMethod = method.toUpperCase();
+  const formattedPath = overridePath.startsWith('/') ? overridePath : `/${overridePath}`;
+  const key = `${reqMethod}:${formattedPath}`;
+  
+  dynamicConfig.overrides[key] = {
+    statusCode: parseInt(statusCode, 10) || 200,
+    body: body || {},
+    headers: headers || {}
+  };
+  
+  console.log(`[${SERVER_ID}] Registered response override for ${key}`);
+  res.json({ message: `Registered response override for ${key}`, override: dynamicConfig.overrides[key] });
+});
+
+controlApp.delete('/control/override', (req, res) => {
+  const { path: overridePath, method } = req.body;
+  if (!overridePath || !method) {
+    return res.status(400).json({ error: "path and method are required" });
+  }
+  const reqMethod = method.toUpperCase();
+  const formattedPath = overridePath.startsWith('/') ? overridePath : `/${overridePath}`;
+  const key = `${reqMethod}:${formattedPath}`;
+  
+  if (dynamicConfig.overrides[key]) {
+    delete dynamicConfig.overrides[key];
+    console.log(`[${SERVER_ID}] Cleared response override for ${key}`);
+    res.json({ message: `Cleared response override for ${key}` });
+  } else {
+    res.status(404).json({ error: `Override for ${key} not found` });
+  }
+});
+
+controlApp.delete('/control/override/all', (req, res) => {
+  dynamicConfig.overrides = {};
+  console.log(`[${SERVER_ID}] Cleared all response overrides`);
+  res.json({ message: "Cleared all response overrides" });
+});
+
+// 제어 서버 리스닝 시작
+const CONTROL_PORT = PORT + 1000;
+controlApp.listen(CONTROL_PORT, () => {
+  console.log(`[${SERVER_ID}] Control API Server is running on port ${CONTROL_PORT}`);
 });
