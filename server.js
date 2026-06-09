@@ -60,15 +60,45 @@ app.get('/error', (req, res) => {
   });
 });
 
-// 4. 고유 마이크로서비스 라우터 로드 및 Swagger 연동
+// 4. 공통 Streaming Endpoint (HTTP Chunked Transfer Encoding 테스트용)
+app.get('/stream', (req, res) => {
+  // Transfer-Encoding: chunked 설정
+  res.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Transfer-Encoding': 'chunked',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+
+  let count = 0;
+  const maxCount = 10;
+  
+  const interval = setInterval(() => {
+    count++;
+    const data = {
+      chunk: count,
+      message: `Streaming chunk #${count} from ${SERVER_ID}`,
+      port: PORT,
+      timestamp: new Date().toISOString()
+    };
+    
+    // JSON 청크 전송 후 개행
+    res.write(JSON.stringify(data) + '\n');
+    
+    if (count >= maxCount) {
+      clearInterval(interval);
+      res.end();
+    }
+  }, 200); // 200ms 간격으로 전송
+});
+
+// 5. 고유 마이크로서비스 라우터 로드 및 Swagger 연동
 try {
   // 라우터 파일 경로: src/routes/<serviceName>.js
   const routerPath = path.join(__dirname, 'src', 'routes', `${serviceConfig.name}.js`);
   const router = require(routerPath);
   
   // 마이크로서비스에 맞춰 라우터 바인딩
-  // 단, 라우터 내부의 경로가 이미 prefix를 포함할 수도 있으므로 두 가지 경우 모두 바인딩
-  // (예: product.js가 '/' 와 '/:id'를 정의하면 '/products' 와 '/products/:id'로 바인딩)
   app.use(serviceConfig.prefix, router);
   
   console.log(`[${SERVER_ID}] Bound router to ${serviceConfig.prefix}`);
@@ -98,6 +128,20 @@ try {
           description: "Current Request Host (Gateway or Direct)"
         }
       ];
+      
+      // 스웨거 스펙에 공통 /stream 경로 명세를 동적으로 꽂아줍니다
+      if (!latestSpec.paths) latestSpec.paths = {};
+      latestSpec.paths['/stream'] = {
+        "get": {
+          "summary": "Streaming response (Chunked Transfer Encoding)",
+          "description": "Returns JSON data chunks one by one with a 200ms delay to test Gateway streaming capabilities.",
+          "responses": {
+            "200": {
+              "description": "Stream of JSON chunks"
+            }
+          }
+        }
+      };
       
       // swagger-ui-express는 req.swaggerDoc이 정의되어 있으면 이를 바탕으로 문서를 동적으로 렌더링합니다.
       req.swaggerDoc = latestSpec;
