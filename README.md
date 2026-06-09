@@ -37,17 +37,17 @@
 
 각 서비스는 로컬 포트 `3001`부터 `3010`까지 하나씩 배정되어 독립적인 프로세스로 실행됩니다.
 
-| 포트 | 서비스명 (PM2 Name) | 주요 모사 API 엔드포인트 | Swagger UI 접속 주소 |
-|:---|:---|:---|:---|
-| **3001** | `user-service` | `GET /users/profile`, `POST /users/login` | [http://localhost:3001/api-docs](http://localhost:3001/api-docs) |
-| **3002** | `product-service` | `GET /products`, `GET /products/:id` | [http://localhost:3002/api-docs](http://localhost:3002/api-docs) |
-| **3003** | `order-service` | `POST /orders`, `GET /orders/:id` | [http://localhost:3003/api-docs](http://localhost:3003/api-docs) |
-| **3004** | `payment-service` | `POST /payments/pay`, `POST /payments/cancel` | [http://localhost:3004/api-docs](http://localhost:3004/api-docs) |
-| **3005** | `inventory-service` | `GET /inventory/:productId`, `POST /inventory/reduce` | [http://localhost:3005/api-docs](http://localhost:3005/api-docs) |
-| **3006** | `cart-service` | `GET /cart`, `POST /cart/add` | [http://localhost:3006/api-docs](http://localhost:3006/api-docs) |
-| **3007** | `delivery-service` | `GET /delivery/:orderId`, `POST /delivery/track` | [http://localhost:3007/api-docs](http://localhost:3007/api-docs) |
-| **3008** | `notification-service` | `POST /notifications/send`, `GET /notifications/history` | [http://localhost:3008/api-docs](http://localhost:3008/api-docs) |
-| **3009** | `review-service` | `GET /reviews/:productId`, `POST /reviews` | [http://localhost:3009/api-docs](http://localhost:3009/api-docs) |
+| 포트     | 서비스명 (PM2 Name)      | 주요 모사 API 엔드포인트                                             | Swagger UI 접속 주소                                             |
+| :------- | :----------------------- | :------------------------------------------------------------------- | :--------------------------------------------------------------- |
+| **3001** | `user-service`           | `GET /users/profile`, `POST /users/login`                            | [http://localhost:3001/api-docs](http://localhost:3001/api-docs) |
+| **3002** | `product-service`        | `GET /products`, `GET /products/:id`                                 | [http://localhost:3002/api-docs](http://localhost:3002/api-docs) |
+| **3003** | `order-service`          | `POST /orders`, `GET /orders/:id`                                    | [http://localhost:3003/api-docs](http://localhost:3003/api-docs) |
+| **3004** | `payment-service`        | `POST /payments/pay`, `POST /payments/cancel`                        | [http://localhost:3004/api-docs](http://localhost:3004/api-docs) |
+| **3005** | `inventory-service`      | `GET /inventory/:productId`, `POST /inventory/reduce`                | [http://localhost:3005/api-docs](http://localhost:3005/api-docs) |
+| **3006** | `cart-service`           | `GET /cart`, `POST /cart/add`                                        | [http://localhost:3006/api-docs](http://localhost:3006/api-docs) |
+| **3007** | `delivery-service`       | `GET /delivery/:orderId`, `POST /delivery/track`                     | [http://localhost:3007/api-docs](http://localhost:3007/api-docs) |
+| **3008** | `notification-service`   | `POST /notifications/send`, `GET /notifications/history`             | [http://localhost:3008/api-docs](http://localhost:3008/api-docs) |
+| **3009** | `review-service`         | `GET /reviews/:productId`, `POST /reviews`                           | [http://localhost:3009/api-docs](http://localhost:3009/api-docs) |
 | **3010** | `recommendation-service` | `GET /recommendations/user/:userId`, `GET /recommendations/trending` | [http://localhost:3010/api-docs](http://localhost:3010/api-docs) |
 
 ---
@@ -63,40 +63,49 @@
 - **의도적인 에러 발생 (Failover 테스트용)**: `GET /error`
   - 즉각적으로 `500 Internal Server Error` 응답을 에러 메시지와 함께 반환합니다.
 - **스트리밍 응답 (Streaming/Chunked 테스트용)**: `GET /stream`
-  - `Transfer-Encoding: chunked` 헤더와 함께 200ms 주기로 총 10개의 JSON 데이터 청크를 순차적으로 전송한 후 연결을 종료합니다. 게이트웨이의 스트리밍 중계 기능을 테스트할 때 유용합니다.
+  - `Transfer-Encoding: chunked` 헤더와 함께 1000ms 주기로 총 10개의 JSON 데이터 청크를 순차적으로 전송한 후 연결을 종료합니다. 게이트웨이의 스트리밍 중계 기능을 테스트할 때 유용합니다.
 
 ---
 
 ## 🚀 사용법 (실행 명령어)
 
 의존성 설치가 아직 완료되지 않았다면 먼저 아래 명령어를 실행하십시오.
+
 ```bash
 npm install
 ```
 
 ### 1. API 서버 전체 시작
+
 PM2를 사용해 10개의 백그라운드 프로세스로 서버를 일괄 실행합니다.
+
 ```bash
 npm run start
 # 또는: npx pm2 start ecosystem.config.js
 ```
 
 ### 2. 구동 상태 확인
+
 현재 온라인 상태인 서버 프로세스 상태를 한눈에 모니터링합니다.
+
 ```bash
 npm run status
 # 또는: npx pm2 status
 ```
 
 ### 3. 실시간 통합 로그 확인
+
 각 API 서버에서 출력하는 로그를 실시간으로 스트리밍합니다.
+
 ```bash
 npm run logs
 # 또는: npx pm2 logs
 ```
 
 ### 4. API 서버 전체 종료
+
 구동 중인 모든 API 서버 프로세스를 중단하고 PM2 목록에서 제거합니다.
+
 ```bash
 npm run stop
 # 또는: npx pm2 delete all

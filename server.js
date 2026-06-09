@@ -89,7 +89,7 @@ app.get('/stream', (req, res) => {
       clearInterval(interval);
       res.end();
     }
-  }, 200); // 200ms 간격으로 전송
+  }, 1000); // 200ms 간격으로 전송
 });
 
 // 5. 고유 마이크로서비스 라우터 로드 및 Swagger 연동
