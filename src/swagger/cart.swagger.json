@@ -1,0 +1,64 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Cart Service API",
+    "version": "1.0.0",
+    "description": "API Gateway Test - Cart Service Mock API"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3006",
+      "description": "Cart Service Port"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/cart": {
+      "get": {
+        "summary": "Get user cart",
+        "responses": {
+          "200": {
+            "description": "Return cart list and items"
+          }
+        }
+      }
+    },
+    "/cart/add": {
+      "post": {
+        "summary": "Add item to cart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "productId": { "type": "string" },
+                  "quantity": { "type": "integer" }
+                },
+                "required": ["productId", "quantity"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Item added to cart successfully"
+          },
+          "400": {
+            "description": "Invalid parameters"
+          }
+        }
+      }
+    }
+  }
+}

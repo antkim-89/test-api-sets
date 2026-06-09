@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Product Service API",
+    "version": "1.0.0",
+    "description": "API Gateway Test - Product Service Mock API"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3002",
+      "description": "Product Service Port"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/delay/{ms}": {
+      "get": {
+        "summary": "Delayed Response",
+        "parameters": [
+          {
+            "name": "ms",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delayed response confirmation"
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "summary": "Get product list",
+        "responses": {
+          "200": {
+            "description": "Return mock list of products"
+          }
+        }
+      }
+    },
+    "/products/{id}": {
+      "get": {
+        "summary": "Get product details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details response"
+          }
+        }
+      }
+    }
+  }
+}

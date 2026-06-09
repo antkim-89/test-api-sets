@@ -1,0 +1,84 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "User Service API",
+    "version": "1.0.0",
+    "description": "API Gateway Test - User Service Mock API"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001",
+      "description": "User Service Port"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/delay/{ms}": {
+      "get": {
+        "summary": "Delayed Response",
+        "parameters": [
+          {
+            "name": "ms",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delayed response confirmation"
+          }
+        }
+      }
+    },
+    "/users/profile": {
+      "get": {
+        "summary": "Get user profile",
+        "responses": {
+          "200": {
+            "description": "Return mock user profile details"
+          }
+        }
+      }
+    },
+    "/users/login": {
+      "post": {
+        "summary": "Mock login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string" },
+                  "password": { "type": "string" }
+                },
+                "required": ["username", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login success and JWT return"
+          },
+          "400": {
+            "description": "Invalid parameters"
+          }
+        }
+      }
+    }
+  }
+}

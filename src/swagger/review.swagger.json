@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Review Service API",
+    "version": "1.0.0",
+    "description": "API Gateway Test - Review Service Mock API"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3009",
+      "description": "Review Service Port"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/reviews/{productId}": {
+      "get": {
+        "summary": "Get product reviews",
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Average ratings and list of comments"
+          }
+        }
+      }
+    },
+    "/reviews": {
+      "post": {
+        "summary": "Submit review",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "productId": { "type": "string" },
+                  "author": { "type": "string" },
+                  "rating": { "type": "integer" },
+                  "comment": { "type": "string" }
+                },
+                "required": ["productId", "author", "rating"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Review submitted successfully"
+          },
+          "400": {
+            "description": "Missing parameters"
+          }
+        }
+      }
+    }
+  }
+}
