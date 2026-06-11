@@ -6,8 +6,14 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// public 디렉토리의 정적 파일 서빙
-app.use(express.static(path.join(__dirname, 'public')));
+// 빌드된 React 앱 서빙 (npm run build → frontend/dist/)
+app.use(express.static(path.join(__dirname, 'frontend', 'dist')));
+
+// SPA fallback — React Router가 처리하도록 index.html 반환
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
+});
 
 // 10개 마이크로서비스 정보 정의
 const SERVICES = [

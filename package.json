@@ -1,14 +1,20 @@
 {
-  "name": "gateway-test-servers",
+  "name": "gateway-test-monorepo",
   "version": "1.0.0",
-  "description": "Mock API servers for gateway testing",
-  "main": "server.js",
+  "description": "Gateway test toolkit — mock API servers + React dashboard",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "start": "pm2 start ecosystem.config.js",
-    "stop": "pm2 stop ecosystem.config.js && pm2 delete ecosystem.config.js",
-    "status": "pm2 status",
-    "logs": "pm2 logs",
-    "list": "pm2 list",
+    "dev": "concurrently -n \"backend,frontend\" -c \"yellow,cyan\" --kill-others \"node dashboard.js\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w frontend",
+    "start": "npm run build && npx pm2 start ecosystem.config.js",
+    "stop": "npx pm2 stop ecosystem.config.js && npx pm2 delete ecosystem.config.js",
+    "restart": "npx pm2 restart ecosystem.config.js",
+    "status": "npx pm2 status",
+    "logs": "npx pm2 logs",
+    "list": "npx pm2 list",
     "stress": "node stress-test.js",
     "dashboard": "node dashboard.js"
   },
@@ -18,6 +24,7 @@
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
-    "autocannon": "^8.0.0"
+    "autocannon": "^8.0.0",
+    "concurrently": "^9.1.2"
   }
 }

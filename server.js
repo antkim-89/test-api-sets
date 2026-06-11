@@ -1,10 +1,25 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const path = require('path');
+const fs = require('fs');
 const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 실시간 요청 성공/실패 통계 누적 미들웨어
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    dynamicConfig.stats.total++;
+    const code = res.statusCode;
+    if (code >= 200 && code < 300) {
+      dynamicConfig.stats.success++;
+    } else if (code >= 400) {
+      dynamicConfig.stats.error++;
+    }
+  });
+  next();
+});
 
 // 포트 및 서비스 매핑 정보
 const PORT = parseInt(process.env.PORT || process.argv[2] || 3001, 10);
@@ -31,7 +46,8 @@ let serverInstance = null;
 let autoRecoveryTimer = null;
 const dynamicConfig = {
   delayMs: 0,
-  overrides: {} // key: "METHOD:path" -> { statusCode, body, headers }
+  overrides: {}, // key: "METHOD:path" -> { statusCode, body, headers }
+  stats: { total: 0, success: 0, error: 0 }
 };
 
 // 메인 서버 기동 함수
@@ -323,6 +339,51 @@ controlApp.use((req, res, next) => {
 
 controlApp.use(express.json());
 
+// API 명세 엔드포인트 목록 반환 (override 셀렉트용)
+controlApp.get('/control/api-spec', (req, res) => {
+  try {
+    const swaggerSpecPath = path.join(__dirname, 'src', 'swagger', `${serviceConfig.name}.swagger.json`);
+    const spec = JSON.parse(fs.readFileSync(swaggerSpecPath, 'utf8'));
+    const endpoints = [];
+
+    // 공통 공개 엔드포인트도 포함
+    const commonPaths = {
+      '/health': { get: { summary: '헬스 체크' } },
+      '/delay/{ms}': { get: { summary: '인위적 지연 응답' } },
+      '/error/{code}': { get: { summary: '오류 응답 생성' } },
+      '/stream': { get: { summary: 'SSE 스트리밍' } },
+    };
+
+    const allPaths = Object.assign({}, commonPaths, spec.paths || {});
+
+    for (const [pathKey, pathItem] of Object.entries(allPaths)) {
+      const methods = ['get', 'post', 'put', 'delete', 'patch'];
+      for (const method of methods) {
+        if (pathItem[method]) {
+          endpoints.push({
+            method: method.toUpperCase(),
+            path: pathKey,
+            summary: pathItem[method].summary || pathItem[method].description || ''
+          });
+        }
+      }
+    }
+
+    res.json({ endpoints });
+  } catch (err) {
+    console.error(`[${SERVER_ID}] Failed to load api-spec:`, err.message);
+    // 스펙 파일이 없어도 공통 엔드포인트만 반환
+    res.json({
+      endpoints: [
+        { method: 'GET', path: '/health', summary: '헬스 체크' },
+        { method: 'GET', path: '/delay/{ms}', summary: '인위적 지연 응답' },
+        { method: 'GET', path: '/error/{code}', summary: '오류 응답 생성' },
+        { method: 'GET', path: '/stream', summary: 'SSE 스트리밍' },
+      ]
+    });
+  }
+});
+
 // 상태 조회
 controlApp.get('/status', (req, res) => {
   res.json({
@@ -333,9 +394,18 @@ controlApp.get('/status', (req, res) => {
     dynamicConfig: {
       delayMs: dynamicConfig.delayMs,
       overridesCount: Object.keys(dynamicConfig.overrides).length,
-      overrides: dynamicConfig.overrides
-    }
+      overrides: dynamicConfig.overrides,
+      stats: dynamicConfig.stats
+    },
+    stats: dynamicConfig.stats
   });
+});
+
+// 실시간 통계 리셋
+controlApp.post('/control/stats/reset', (req, res) => {
+  dynamicConfig.stats = { total: 0, success: 0, error: 0 };
+  console.log(`[${SERVER_ID}] Request stats reset via control port`);
+  res.json({ message: "Stats reset successfully", stats: dynamicConfig.stats });
 });
 
 // 메인 서버 복구 (켜기)
